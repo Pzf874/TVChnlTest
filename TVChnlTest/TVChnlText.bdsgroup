@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<PersonalityInfo>
+		<Option>
+			<Option Name="Personality">Default.Personality</Option>
+			<Option Name="ProjectType"></Option>
+			<Option Name="Version">1.0</Option>
+			<Option Name="GUID">{4F315227-A412-4EB2-B0C9-6C0161ADE318}</Option>
+		</Option>
+	</PersonalityInfo>
+	<Default.Personality>  <Projects>
+      <Projects Name="TVChnlTest.exe">TVChnlTest.bdsproj</Projects>
+      <Projects Name="aplayer.exe">APlayer.bdsproj</Projects>
+      <Projects Name="Targets">TVChnlTest.exe aplayer.exe</Projects>
+    </Projects>
+    <Dependencies/>
+  </Default.Personality>
+</BorlandProject>
