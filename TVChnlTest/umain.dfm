@@ -29,29 +29,27 @@ object fmain: Tfmain
       783
       145)
     object lblCount: TLabel
-      Left = 351
+      Left = 338
       Top = 116
-      Width = 55
+      Width = 68
       Height = 19
-      Hint = #35774#23450#22810#23569#20010#36827#31243#21516#26102#26816#26597#26377#25928#24615
       Anchors = [akTop, akRight]
-      Caption = #26816#26597#36827#31243':'
+      Caption = #26816#26597#32447#31243#25968':'
     end
     object lbl1: TLabel
-      Left = 487
+      Left = 474
       Top = 116
-      Width = 55
+      Width = 68
       Height = 19
-      Hint = #35774#23450#26816#26597#26102#65292#26080#27861#36830#25509#22810#23569#31186#23601#36229#26102#36820#22238#12290
       Anchors = [akTop, akRight]
-      Caption = #26816#26597#36229#26102':'
+      Caption = #26816#26597#36229#26102#31186':'
     end
     object btnCheck: TSpeedButton
       Left = 664
       Top = 111
       Width = 112
       Height = 28
-      Hint = #25353#25351#23450#36827#31243#25968#21644#38142#25509#36229#26102#31186#65292#26816#26597#21508#39057#36947#28304#26377#25928#24615'('#38656#35201'Aplayer.dll'#21644#35299#30721#24211')'
+      Hint = #25353#25351#23450#32447#31243#25968#21644#38142#25509#36229#26102#25773#25918#21508#39057#36947#28304#26816#26597#26377#25928#24615'('#38656#35201'Aplayer.dll'#21644#35299#30721#24211')'
       AllowAllUp = True
       Anchors = [akTop, akRight]
       GroupIndex = 1
@@ -197,25 +195,34 @@ object fmain: Tfmain
       Top = 111
       Width = 47
       Height = 29
-      Hint = #35774#23450#22810#23569#20010#36827#31243#21516#26102#26816#26597#26377#25928#24615
       Anchors = [akTop, akRight]
-      MaxValue = 20
+      MaxValue = 10
       MinValue = 1
       TabOrder = 6
-      Value = 5
+      Value = 4
     end
     object neTimeOut: TSpinEdit
       Left = 548
       Top = 111
       Width = 47
       Height = 29
-      Hint = #35774#23450#26816#26597#26102#65292#26080#27861#36830#25509#22810#23569#31186#23601#36229#26102#36820#22238#12290
       Anchors = [akTop, akRight]
       Increment = 5
       MaxValue = 60
       MinValue = 5
       TabOrder = 7
       Value = 10
+    end
+    object cbRemeNGTO: TCheckBox
+      Left = 654
+      Top = 111
+      Width = 97
+      Height = 17
+      Hint = #35760#20303'NG/TO'#32467#26524#30340'IP'#65292#21518#38754#30896#21040#30456#21516'IP'#65292#30452#25509#26631#35760'NG/TO'#65292#21152#24555#21028#26029#36895#24230#65292#27880#24847#35823#21028#12290'('#27599#27425#26816#26597#21069#20250#28165#38500'IP'#34920')'
+      Anchors = [akTop, akRight]
+      Caption = #35760#24518'NG/TO'
+      TabOrder = 8
+      Visible = False
     end
     object cbFollow: TCheckBox
       Left = 602
@@ -225,7 +232,7 @@ object fmain: Tfmain
       Hint = #26816#26597#36807#31243#20013#65292#34920#26684#24403#21069#34892#36319#38543#26816#26597#20301#32622#24448#19979#28378#21160
       Anchors = [akTop, akRight]
       Caption = #36319#38543
-      TabOrder = 8
+      TabOrder = 9
     end
   end
   object dbgrd1: TDBGrid
@@ -298,12 +305,5 @@ object fmain: Tfmain
     Parameters = <>
     Left = 416
     Top = 232
-  end
-  object tmr1: TTimer
-    Enabled = False
-    Interval = 200
-    OnTimer = tmr1Timer
-    Left = 160
-    Top = 168
   end
 end

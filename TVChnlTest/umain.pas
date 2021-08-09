@@ -5,20 +5,18 @@ interface
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, ComCtrls, StdCtrls, ExtCtrls, Buttons, Grids, DBGrids, DB, ADODB,
-  comobj, utools, Spin;
+  comobj, utools, uPlayer, Spin;
 
 type
   TcsResult = record        //检查结果结构
-  	fth:Integer;            //线程号
+  	fth:Cardinal;            //线程号
     fid:Integer;            //序号
     fResult:Integer;        //结果0..3
     fWidth:integer;
     fHeight:integer;
     fConnectms:integer;
     fSpeed:integer;
-    fPlayer:THandle;        //播放器进程hProcess句柄
   end;
-  PcsResult = ^TcsResult;
 
   Tfmain = class(TForm)
     pnl1: TPanel;
@@ -46,8 +44,8 @@ type
     lbl1: TLabel;
     neTimeOut: TSpinEdit;
     btnCheck: TSpeedButton;
+    cbRemeNGTO: TCheckBox;
     cbFollow: TCheckBox;
-    tmr1: TTimer;
     procedure btnClearClick(Sender: TObject);
     procedure grpRewDblClick(Sender: TObject);
     procedure btnImportClick(Sender: TObject);
@@ -64,18 +62,16 @@ type
     procedure FormResize(Sender: TObject);
     procedure btnCheckClick(Sender: TObject);
     procedure dbgrd1DblClick(Sender: TObject);
-    procedure tmr1Timer(Sender: TObject);
   private
     { Private declarations }
-    threads: array of TcsResult;
-    oneplay: TcsResult;
+    NGTOips:TStringList;
+    threads: array of TfPlayer;
+    procedure aThreadTerminated(Sender:TObject);
     function GetNextSource(const index:Integer; var Curid:Integer; var url:string):Boolean;
     procedure SetCheckedSource(const cs: TcsResult);
     procedure StartNextThread(index,fid:Integer);
-    function PlayerStart(const idx,fid:Integer;const url:string):Hwnd;
-    procedure PlayerEnd1(var Message:TMessage);Message UM_PLAY_END1;
-    procedure PlayerEnd2(var Message:TMessage);Message UM_PLAY_END2;
-    procedure PlayerEnd(var Message:TMessage);Message UM_PLAY_END;
+    procedure AddNGTOips(Url:string; Res,Thi:Integer);
+    function isCheckedNGTO(furl:string; var res:Integer; var Thi:Cardinal):Boolean;
   public
     { Public declarations }
   end;
@@ -96,69 +92,11 @@ uses
 type
   THackDBGrid = class(TDBGrid);
 
-//创建一个exe进程,并返回主窗口hwnd
-function CreateProcessHwnd(exe,cmd:string):Hwnd;
-var
-  StartUpInfo: TStartUpInfoA;
-  ProcessInfo: TProcessInformation;
-  gui: tagGUITHREADINFO;
-  hAcount: HWND;
-begin
-  FillChar(StartUpInfo, Sizeof(TStartUpInfo), #0);
-  FillChar(ProcessInfo, Sizeof(TProcessInformation), #0);
-  StartUpInfo.cb := Sizeof(TstartUpInfo);
-  StartUpInfo.dwFlags := STARTF_USESHOWWINDOW;
-  StartUpInfo.wShowWindow := SW_SHOWNOACTIVATE;
-  try
-    CreateProcess(nil, PChar(exe+' '+cmd), nil, nil, False, 0, nil, nil,
-      StartUpInfo, ProcessInfo);
-  except
-    Result := 0;
-    Exit;
-  end;
-  Result := ProcessInfo.hProcess;
-{  WaitForInputIdle(ProcessInfo.hProcess, INFINITE);
-  FillMemory(@gui, Sizeof(tagGUITHREADINFO), 0);
-  gui.cbSize   :=   Sizeof(tagGUITHREADINFO);
-  //这个可以得到刚才创建进程的主窗口句柄
-  GetGUIThreadInfo(ProcessInfo.dwThreadId, gui);
-  hAcount := gui.hwndActive;
-  Result := hAcount;
-
-  //得到子窗口句柄
-  hAcount := FindWindowExA(gui.hwndActive, 0, 'ATL:30A441A8', PAnsiChar(0));
-
-  //可以结束自己创建的进程
-  TerminateProcess(ProcessInfo.hProcess, 0);
-}
-end;
-
-//为了不影响本程序，创建独立的播放进程播放url，而idx,fid穿进去用于结果消息返回后比对
-function Tfmain.PlayerStart(const idx,fid:Integer;const url:string):Hwnd;
-var
-  c,s: string;
-  pcs: PcsResult;
-begin
-Perform(WM_SETREDRAW, 0, 0); //锁屏幕 防止闪烁
-tmr1.Enabled := True;
-//调用参数：Aplayer.exe furl fshow ftimout fmhandle findex
-  s := Format('%s %d %d %d %d',[url,Ord(idx>High(threads)),neTimeOut.Value,Handle,idx]);
-  c := ExtractFilePath(Application.ExeName)+'Aplayer.exe';
-	Result := CreateProcessHwnd(c,s);
-  if idx>High(threads) then pcs := @oneplay else pcs := @threads[idx];
-  pcs^.fPlayer := Result;
-  pcs^.fTh := idx;
-  pcs^.fid := fid;
-end;
-
-//获取指定序号后面的需要检查的下一个序号和URL，返回成功则新序号和url已刷新curid,url
 function Tfmain.GetNextSource(const index:Integer; var Curid:Integer; var url:string):Boolean;
 var
    rowDelta: Integer;
    rowCur: integer;
 begin
-Perform(WM_SETREDRAW, 0, 0); //锁屏幕 防止闪烁
-tmr1.Enabled := True;
   Result := False;
   with dsrc.DataSet do if Active then begin
     if RecordCount=0 then Exit;
@@ -194,14 +132,49 @@ tmr1.Enabled := True;
   end;
 end;
 
+function GetIpAddr(const Url:string):string;
+var
+  str1:string;
+begin
+  str1 := Url;
+  GetSubStr(str1,'//');           //切掉"//“之前
+  Result := GetSubStr(str1,'/');  //获得”/"之前
+end;
+
+//记忆url的IP地址，检查结果，检查线程号
+procedure Tfmain.AddNGTOips(Url:string; Res,Thi:Integer);
+begin
+  Url := GetIpAddr(Url);
+  if Url='' then Exit;
+  if NGTOips.IndexOfName(Url)>=0 then Exit;//IP已经存在
+  NGTOips.Add(Format('%s=%d,%d',[Url,Res,Thi]));
+end;
+
+//检查furl是否在记忆的IP列表中，是则返回记忆的结果和检查的线程号
+function Tfmain.isCheckedNGTO(furl:string; var res:Integer; var Thi:Cardinal):Boolean;
+var
+  i:Integer;
+  str1,str2:string;
+begin
+  Result := False;
+  furl := GetIpAddr(furl);
+  if furl='' then Exit;
+  i := NGTOips.IndexOfName(furl);
+  if i<0 then Exit;
+  str1 := NGTOips[i];
+  GetSubStr(str1,'=');
+  str2 := GetSubStr(str1,',');
+  res := StrToIntDef(str2,0);
+  Thi := StrToIntDef(str1,0);
+  Result := res>0;
+end;
+
 //标记检查结果
 procedure Tfmain.SetCheckedSource(const cs: TcsResult);
 var
    rowDelta: Integer;
    rowCur: integer;
 begin
-Perform(WM_SETREDRAW, 0, 0); //锁屏幕 防止闪烁
-tmr1.Enabled := True;
   with dsrc.DataSet do if Active then begin
     if RecordCount=0 then Exit;
     DisableControls;
@@ -226,6 +199,8 @@ tmr1.Enabled := True;
           FieldByName('fVHeight').Value := Null;
           FieldByName('fConnect').Value := Null;
           FieldByName('fSpeed').Value := Null;
+          if cbRemeNGTO.Checked then
+            AddNGTOips(FieldByName('fUrl').AsString,cs.fResult,cs.fth);
         end;
       end
       else begin                                              //Unknow
@@ -251,83 +226,78 @@ procedure Tfmain.StartNextThread(index,fid:Integer);
 var
   i:Integer;
   furl:string;
+  cs: TcsResult;
 begin
   if (not btnCheck.Down) or (not GetNextSource(index,fid,furl)) or (fid=0) or (furl='') then begin
+    threads[index].Free; threads[index] := nil;
     for i := Low(threads) to High(threads) do //检查一下所有进行中的线程是否全关闭
-      if threads[i].fPlayer>0 then Exit;
+      if Assigned(threads[i]) then Exit;
     btnCheck.Down := False;
     btnCheck.Click;         //还原按钮状态和标识
     btnCheck.Enabled := True;
     Exit;
   end;
-  PlayerStart(index,fid,furl);
-end;
+  //检查furl是否已经被标记为NG，TO
+  if cbRemeNGTO.Checked and isCheckedNGTO(furl,cs.fResult,cs.fth) then begin
+    cs.fid := fid;
+    SetCheckedSource(cs);     //fid,fth,fResult有意义，其他无用
+    StartNextThread(index,fid);   //递归
+    Exit;
+  end;
 
-procedure Tfmain.tmr1Timer(Sender: TObject);
-begin
-  tmr1.Enabled := False;
-  Perform(WM_SETREDRAW, 1, 0); //解锁屏幕
-  ReDrawWindow(Handle,nil,0,RDW_INVALIDATE or RDW_ALLCHILDREN);
+  with Tfplayer(threads[index]) do begin     //配置输入参数
+    findex := index;
+    fIdnum := fid;
+    fTimeOut := neTimeOut.Value*1000; //超时ms
+    OnCompleted := aThreadTerminated;
+    Execute(Self,False);              //初始化
+    Media := furl;                    //指定播放内容
+  end;
 end;
 
 //双击一行频道，打开窗口播放它，实际看看能不能连接
 procedure Tfmain.dbgrd1DblClick(Sender: TObject);
 var
-  fth,fid:Integer;
+  fid:Integer;
   furl:String;
 begin
   with dsrc.DataSet do if Active then begin
     fid := FieldByName('fId').AsInteger;
     furl := Trim(FieldByName('fUrl').AsString);
     if furl='' then Exit;
-
-    if oneplay.fPlayer>0 then
-      TerminateProcess(oneplay.fPlayer, 0);        //threads[i]存的进程THandle=hProcess
-
-    fth := High(threads)+1;
-    if fth<neThread.Value then fth := neThread.Value;
-    PlayerStart(fth,fid,furl);  //配置输入参数
+    with Tfplayer.Create(Self) do begin     //配置输入参数
+      findex := High(threads)+1; //不属于自动检查的
+      fIdnum := fid;
+      OnCompleted := aThreadTerminated;
+      Execute(Self,True);              //初始化
+      Media := furl;                    //指定播放内容
+    end;
   end;
 end;
 
 //检查线程结束时回调函数
-procedure Tfmain.PlayerEnd1(var Message:TMessage);
+procedure Tfmain.aThreadTerminated(Sender:TObject);
 var
-  idx:Integer;
-  pcs: PcsResult;
+  cs:TcsResult;
 begin
-  idx := Message.WParam shr 24;
-  if idx>High(threads) then pcs := @oneplay else pcs := @threads[idx];
-  pcs^.fResult := Message.WParam and $FFFFFF;
-  pcs^.fSpeed := Message.lParam;
-end;
-
-procedure Tfmain.PlayerEnd2(var Message:TMessage);
-var
-  idx:Integer;
-  pcs: PcsResult;
-begin
-  idx := Message.WParam shr 24;
-  if idx>High(threads) then pcs := @oneplay else pcs := @threads[idx];
-//  pcs^.fResult := Message.WParam and $FFFFFF;
-  pcs^.fConnectms := Message.lParam;
-end;
-
-procedure Tfmain.PlayerEnd(var Message:TMessage);
-var
-  idx:Integer;
-  pcs: PcsResult;
-begin
-  idx := Message.WParam shr 24;
-  if idx>High(threads) then pcs := @oneplay else pcs := @threads[idx];
-  pcs^.fHeight := Message.WParam and $FFFFFF;
-  pcs^.fWidth := Message.lParam;
-  SetCheckedSource(pcs^);
-  pcs^.fPlayer := 0;        //认为此进程已经结束
+  with Tfplayer(Sender) do begin
+    cs.fth := findex;
+    cs.fid := fIdnum;
+    cs.fResult := VResult;
+    cs.fWidth := VWidth;
+    cs.fHeight := VHeight;
+    cs.fConnectms := VConnectms;
+    cs.fSpeed := VSpeed;
+    SetCheckedSource(cs);
+  end;
 
   //超出预先开好的范围:双击播放的可视窗口，结束
-  if (pcs^.fth <= High(threads)) then
-    StartNextThread(pcs^.fth,pcs^.fid);
+  if (cs.fth > High(threads)) then begin
+    Sender.Free;                         //摧毁
+    Exit;
+  end;
+  Application.ProcessMessages;
+  StartNextThread(cs.fth,cs.fid);
 end;
 
 //开始或停止检查
@@ -337,9 +307,6 @@ var
   fid:Integer;
 begin
   if btnCheck.Down then begin
-    if not FileExists(ExtractFilePath(Application.ExeName)+'Aplayer.exe') then
-      TimeMessage(3,'没有【最简播放器】：'+ExtractFilePath(Application.ExeName)+'Aplayer.exe');
-    
     neThread.Enabled := False;
     neTimeOut.Enabled := False;
     btnCheck.Caption := '停止检查';
@@ -349,9 +316,11 @@ begin
       Execute;
     end;
     TADOQuery(dsrc.DataSet).Requery;          //隐含了回到数据集首行
+    NGTOips.Clear;
     SetLength(threads,neThread.Value);
     fid := 0;
     for i := Low(threads) to High(threads) do begin //开启指定数量的线程
+      threads[i] := Tfplayer.Create(Self);
       StartNextThread(i,fid);
     end;
   end
@@ -359,12 +328,11 @@ begin
     neThread.Enabled := True;
     neTimeOut.Enabled := True;
     btnCheck.Caption := '开始检查';
-//    btnCheck.Enabled := False;              //使用TerminateProcess不会有结束消息过来了
+    btnCheck.Enabled := False;
     for i := Low(threads) to High(threads) do //关闭所有进行中的线程
     begin
-      if threads[i].fPlayer>0 then
-        TerminateProcess(threads[i].fPlayer, 0);        //threads[i]存的进程THandle=hProcess
-//        PostMessage(threads[i].fPlayer,WM_CLOSE,0,0); //threads[i]存的进程的主窗口的Hwnd
+      if Assigned(threads[i]) then
+        threads[i].Close;
     end;
   end;
 end;
@@ -563,11 +531,7 @@ var
 	csdbs : OleVariant;
 	Vers: TAppVerInfo;
 begin
-  ReportMemoryLeaksOnShutdown := Boolean(DebugHook);
-  DoubleBuffered := True;
-  for i := 0 to ControlCount - 1 do
-    if Controls[i] is TWinControl then
-      TWinControl(Controls[i]).DoubleBuffered := True;
+  ReportMemoryLeaksOnShutdown := True;//Boolean(DebugHook);
 
   Hint := Application.Title;
 	Vers := TAppVerInfo.Create(Self);
@@ -576,6 +540,10 @@ begin
 	finally
 		Vers.Free;
 	end;
+  NGTOips := TStringList.Create;
+  NGTOips.Duplicates := dupIgnore;
+  NGTOips.CaseSensitive := False;
+  NGTOips.Sorted := True;
 
 	APPDB := ChangeFileExt(Application.ExeName,'.MDB');
 	//连接Access数据库，如不存在，创建之
@@ -669,11 +637,15 @@ end;
 //自动保存内存临时表格内容，关闭临时表
 procedure Tfmain.FormDestroy(Sender: TObject);
 begin
-  if oneplay.fPlayer>0 then
-    TerminateProcess(oneplay.fPlayer, 0);   //threads[i]存的进程THandle=hProcess
-  btnCheck.Down := False;                   //如果有检查线程运行中，全体停止
+  btnCheck.Down := False; //如果有检查线程运行中，全体停止
   btnCheck.Click;
+{	with dset do begin
+    SaveToFile('.\LastSave.cds');
+    Close;
+  end;
+}
 	conEDB.Connected := False;
+  NGTOips.Free;
 end;
 
 procedure Tfmain.FormResize(Sender: TObject);
